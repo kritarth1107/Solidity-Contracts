@@ -243,4 +243,70 @@ contract TokenVesting is ReentrancyGuard {
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
     }
+
+    /// @notice Returns full vesting details for a user
+/// @param user Address whose vesting schedules are queried
+function getVestingsDetails(address user)
+    external
+    view
+    returns (
+        uint256[] memory totalAmounts,
+        uint256[] memory claimedAmounts,
+        uint256[] memory claimableAmounts,
+        uint256[] memory unlockAtStartAmounts,
+        uint256[] memory cliffs,
+        uint256[] memory starts,
+        uint256[] memory ends
+    )
+{
+    VestingSchedule[] memory userVests = vestings[user];
+    uint256 len = userVests.length;
+
+    totalAmounts = new uint256[](len);
+    claimedAmounts = new uint256[](len);
+    claimableAmounts = new uint256[](len);
+    unlockAtStartAmounts = new uint256[](len);
+    cliffs = new uint256[](len);
+    starts = new uint256[](len);
+    ends = new uint256[](len);
+
+    uint256 currentTime = block.timestamp;
+
+    for (uint256 i = 0; i < len; i++) {
+        VestingSchedule memory vs = userVests[i];
+
+        totalAmounts[i] = vs.totalAmount;
+        claimedAmounts[i] = vs.claimedAmount;
+        unlockAtStartAmounts[i] = vs.unlockAtStartAmount;
+        cliffs[i] = vs.cliff;
+        starts[i] = vs.start;
+        ends[i] = vs.end;
+
+        // --- calculate real-time claimable ---
+        uint256 unlocked = vs.unlockAtStartAmount;
+
+        if (currentTime >= vs.cliff) {
+            if (currentTime >= vs.end) {
+                unlocked = vs.totalAmount;
+            } else {
+                uint256 linearPortion = vs.totalAmount - vs.unlockAtStartAmount;
+                uint256 timeElapsed = currentTime - vs.start;
+                uint256 vestingDuration = vs.end - vs.start;
+
+                uint256 linearVested = (linearPortion * timeElapsed) / vestingDuration;
+                unlocked += linearVested;
+
+                if (unlocked > vs.totalAmount) {
+                    unlocked = vs.totalAmount;
+                }
+            }
+        }
+
+        claimableAmounts[i] =
+            unlocked > vs.claimedAmount
+                ? unlocked - vs.claimedAmount
+                : 0;
+    }
+}
+
 }
